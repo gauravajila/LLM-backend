@@ -6,6 +6,9 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import text
 from app.repositories.base_repository import BaseRepository
 from app.models.client_user import ClientUser
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 SECRET_KEY = "test_token"
 ALGORITHM = "HS256"
@@ -18,7 +21,7 @@ def create_access_token(data: dict, expires_delta: timedelta):
     return encoded_jwt
 
 def send_sms(phone_number, otp):
-    url = f'http://chotasandesh.com:9123/CsRestApi/gbt/submit-tsms?username=progsl&password=G8Q2E58RF&from=PROGSL&msisdn={phone_number}&msg=Dear+Customer%2C+Please+use+OTP+{otp}+for+system+login.+Do+not+share+with+anyone.+ProsperoGS&response=text'
+    url = f'http://chotasandesh.com:9123/CsRestApi/gbt/submit-tsms?username=on2vga&password=JKRS4BW0CVK&from=ON2VGA&msisdn={phone_number}&msg=Dear+User%2C+OTP+is+{otp}+for+your+login+to+GBusiness+AI+agent+https%3A%2F%2Fvm.ltd%2FON2VGA%2F0vlBAn.%0ADo+not+share+OTP+with+anyone%2C+we+never+contact+you+to+verify+OTP.%0AFor+any+issues%2C+contact+ONEVEGA+Systems+Pvt+Ltd.&response=text'
     
     # Send the GET request
     response = requests.get(url)
@@ -30,6 +33,47 @@ def send_sms(phone_number, otp):
         print("Failed to send SMS.")
         print(f"Status Code: {response.status_code}")
         print(f"Response: {response.text}")
+
+def send_email(email, otp):
+    # Gmail SMTP configuration
+    smtp_server = "smtp.gmail.com"
+    smtp_port = 587
+    sender_email = "vish.dharmapala.vega@gmail.com"  # Replace with your Gmail address
+    sender_password = "PSidENTErSPo"  # Replace with your app-specific password
+
+    # Email content
+    subject = "Your OTP Code"
+    body = f"""
+    Hi,
+
+    Your OTP code is: {otp}
+
+    This code is valid for 5 minutes. Please do not share it with anyone.
+
+    Best regards,
+    OneVega
+    """
+
+    try:
+        # Create the email message
+        msg = MIMEMultipart()
+        msg["From"] = sender_email
+        msg["To"] = email
+        msg["Subject"] = subject
+        msg.attach(MIMEText(body, "plain"))
+
+        # Connect to Gmail's SMTP server and send the email
+        with smtplib.SMTP(smtp_server, smtp_port) as server:
+            server.starttls()  # Start TLS encryption
+            server.login(sender_email, sender_password)
+            server.sendmail(sender_email, email, msg.as_string())
+
+        print(f"OTP email sent successfully to {email}")
+
+    except Exception as e:
+        print(f"Failed to send OTP email to {email}: {e}")
+        raise
+
         
 class ClientUsersRepository(BaseRepository):
     def __init__(self):
@@ -198,3 +242,10 @@ class ClientUsersRepository(BaseRepository):
             user_instance = ClientUser(**dict(zip(ClientUser.__annotations__, user_data_tuple)))
             return user_instance
         return None
+    
+    
+    def get_user_by_email(self, email):
+        query = text("SELECT * FROM users WHERE email = :email")
+        values = {"email": email}
+        result = self.execute_query(query, values)
+        return result[0] if result else None

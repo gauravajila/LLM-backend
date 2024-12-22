@@ -12,3 +12,7 @@ class EmailAlreadyInUseException(HTTPException):
 class InternalServerErrorException(HTTPException):
     def __init__(self):
         super().__init__(status_code=500, detail="Internal Server Error")
+        
+class PermissionError(Exception):
+    """Custom exception for permission-related errors"""
+    pass

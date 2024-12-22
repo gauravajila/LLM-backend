@@ -6,7 +6,7 @@ from datetime import timedelta
 from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordBearer
 from app.models.client_user import ClientUser, PhoneRequestForm, OTPVerificationForm
-from app.repositories.client_user_repository import ClientUsersRepository, create_access_token, send_sms
+from app.repositories.client_user_repository import ClientUsersRepository, create_access_token, send_sms, send_email
 from app.exceptions import UserNotFoundException, EmailAlreadyInUseException, InternalServerErrorException
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
@@ -142,6 +142,52 @@ async def verify_otp(form_data: OTPVerificationForm):
         
         return JSONResponse(content=response_data)
     
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="Invalid OTP"
+    )
+    
+    
+@router.post("/send-email-otp", response_model=dict)
+async def send_otp_to_email(form_data: PhoneRequestForm):
+    user = users_repository.get_user_by_email(form_data.email)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User does not exist")
+
+    users_repository.delete_otp(form_data.email)  # Use email in the phone_number column
+    otp = random.randint(1000, 9999)
+    users_repository.store_otp(form_data.email, otp)  # Store email as phone_number
+    send_email(form_data.email, otp)
+
+    return {"message": "OTP sent successfully to email"}
+
+@router.post("/verify-email-otp", response_model=dict)
+async def verify_email_otp(form_data: OTPVerificationForm):
+    if users_repository.validate_otp(form_data.email, form_data.otp):  # Validate using email as phone_number
+        users_repository.delete_otp(form_data.email)
+        user = users_repository.get_user_by_email(form_data.email)
+
+        if not user:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+
+        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = create_access_token(
+            data={"sub": form_data.email}, expires_delta=access_token_expires
+        )
+
+        response_data = {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "user_id": user.id,
+            "user_name": user.name,
+            "email": user.email,
+            "role": user.role,
+            "subscription": user.subscription,
+            "customer_other_details": user.customer_other_details,
+        }
+
+        return JSONResponse(content=response_data)
+
     raise HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
         detail="Invalid OTP"
