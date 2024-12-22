@@ -245,7 +245,7 @@ class ClientUsersRepository(BaseRepository):
     
     
     def get_user_by_email(self, email):
-        query = text("SELECT * FROM users WHERE email = :email")
+        query = text("SELECT * FROM ClientUsers WHERE email = :email")
         values = {"email": email}
         result = self.execute_query(query, values)
         return result[0] if result else None

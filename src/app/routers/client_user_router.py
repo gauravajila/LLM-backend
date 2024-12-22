@@ -5,7 +5,7 @@ from typing import List
 from datetime import timedelta
 from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordBearer
-from app.models.client_user import ClientUser, PhoneRequestForm, OTPVerificationForm
+from app.models.client_user import ClientUser, PhoneRequestForm, OTPVerificationForm, EmailRequestForm, EmailOTPVerificationForm
 from app.repositories.client_user_repository import ClientUsersRepository, create_access_token, send_sms, send_email
 from app.exceptions import UserNotFoundException, EmailAlreadyInUseException, InternalServerErrorException
 
@@ -149,7 +149,7 @@ async def verify_otp(form_data: OTPVerificationForm):
     
     
 @router.post("/send-email-otp", response_model=dict)
-async def send_otp_to_email(form_data: PhoneRequestForm):
+async def send_otp_to_email(form_data: EmailRequestForm):
     user = users_repository.get_user_by_email(form_data.email)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User does not exist")
@@ -162,7 +162,7 @@ async def send_otp_to_email(form_data: PhoneRequestForm):
     return {"message": "OTP sent successfully to email"}
 
 @router.post("/verify-email-otp", response_model=dict)
-async def verify_email_otp(form_data: OTPVerificationForm):
+async def verify_email_otp(form_data: EmailOTPVerificationForm):
     if users_repository.validate_otp(form_data.email, form_data.otp):  # Validate using email as phone_number
         users_repository.delete_otp(form_data.email)
         user = users_repository.get_user_by_email(form_data.email)

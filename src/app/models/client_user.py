@@ -6,8 +6,16 @@ from pydantic import BaseModel
 
 class PhoneRequestForm(BaseModel):
     phone_number: str
+    
+class EmailRequestForm(BaseModel):
+    email: str
+    
 class OTPVerificationForm(BaseModel):
     phone_number: str
+    otp: str
+    
+class EmailOTPVerificationForm(BaseModel):
+    email: str
     otp: str
     
 class ClientUser(BaseModel):
