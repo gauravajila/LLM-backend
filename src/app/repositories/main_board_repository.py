@@ -5,6 +5,7 @@ from datetime import datetime
 from app.models.main_board import MainBoard
 from app.models.main_board_access import MainBoardAccess
 from app.models.permissions import MainBoardPermission
+from app.models.client_user import ClientUser
 from fastapi import Depends
 import os
 from dotenv import load_dotenv
@@ -113,12 +114,14 @@ class MainBoardRepository:
         if not self.access_repository.check_permission(main_board_id, client_user_id, MainBoardPermission.VIEW):
             return None
             
-        statement = select(ClientUsers, MainBoardAccess).join(
+        statement = select(ClientUser, MainBoardAccess).join(
             MainBoardAccess, 
-            ClientUsers.id == MainBoardAccess.client_user_id
+            ClientUser.id == MainBoardAccess.client_user_id
         ).where(MainBoardAccess.main_board_id == main_board_id)
         
         results = self.session.exec(statement).all()
+        
+
         
         # Group permissions by user
         users_dict = {}
@@ -131,7 +134,7 @@ class MainBoardRepository:
                     "permissions": []
                 }
             users_dict[user.id]["permissions"].append(access.permission)
-            
+        
         return list(users_dict.values())
 
     def convert_to_tree_structure(self, data: List[Any], client_user_id: int) -> List[Dict[str, Any]]:

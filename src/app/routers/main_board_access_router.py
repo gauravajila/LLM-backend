@@ -154,12 +154,13 @@ async def get_board_users(main_board_id: int, current_user_id: int, token: str =
         # Get all users with their permissions
         board_users = main_board_repository.get_board_users(main_board_id, current_user_id)
         
+        print(board_users)
         return [
             UserPermissionResponse(
-                client_user_id=user[0],       # Access 'id'
-                user_name=user[1],           # Access 'name'
-                user_email=user[2],          # Access 'email'
-                permissions=user[3]          # Access 'permissions'
+                client_user_id=user['id'],       # Access 'id'
+                user_name=user['name'],           # Access 'name'
+                user_email=user['email'],          # Access 'email'
+                permissions=user['permissions']          # Access 'permissions'
             )
             for user in board_users
         ]
