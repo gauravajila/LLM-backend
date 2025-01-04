@@ -21,3 +21,5 @@ pandasai[modin]
 pmdarima
 loguru==0.7.2
 seaborn
+boto3==1.35.87
+azure-storage-blob==12.24.0
