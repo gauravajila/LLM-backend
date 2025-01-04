@@ -1,16 +1,30 @@
 
+import os
 import random
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Header, Security
+from fastapi.security import APIKeyHeader
 from typing import List
 from datetime import timedelta
 from fastapi.responses import JSONResponse
-from fastapi.security import OAuth2PasswordBearer
-from app.models.client_user import ClientUser, PhoneRequestForm, OTPVerificationForm, EmailRequestForm, EmailOTPVerificationForm
-from app.repositories.client_user_repository import ClientUsersRepository, create_access_token, send_sms, send_email
+from app.models.client_user import ClientUser, LoginClientUser, PhoneRequestForm, OTPVerificationForm, EmailRequestForm, EmailOTPVerificationForm
+from app.repositories.client_user_repository import ClientUsersRepository, send_sms
 from app.exceptions import UserNotFoundException, EmailAlreadyInUseException, InternalServerErrorException
+from dotenv import load_dotenv
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
-ACCESS_TOKEN_EXPIRE_MINUTES = 1440  # 24 hours
+# Load environment variables from .env file
+load_dotenv()
+SECRET_TOKEN = os.getenv("SECRET_TOKEN")
+
+# Define API key security scheme
+API_KEY_NAME = "X-API-Key"
+api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=True)
+
+def verify_token(x_token: str = Security(api_key_header)):
+    if x_token != SECRET_TOKEN:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing token",
+        )
 
 router = APIRouter(prefix="/client-users", tags=["Client Users"])
 
@@ -18,7 +32,7 @@ router = APIRouter(prefix="/client-users", tags=["Client Users"])
 users_repository = ClientUsersRepository()
 
 @router.post("/", response_model=ClientUser)
-async def create_user(user: ClientUser):
+async def create_user(user: ClientUser, token: str = Depends(verify_token)):
     try:
         created_user = users_repository.create_user(user)
         return created_user
@@ -28,12 +42,12 @@ async def create_user(user: ClientUser):
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 @router.get("/", response_model=List[ClientUser])
-async def get_users():
+async def get_users(token: str = Depends(verify_token)):
     users = users_repository.get_users()
     return users
 
 @router.get("/{user_id}", response_model=ClientUser)
-async def get_user(user_id: int):
+async def get_user(user_id: int, token: str = Depends(verify_token)):
     try:
         user = users_repository.get_user(user_id)
         if not user:
@@ -43,7 +57,7 @@ async def get_user(user_id: int):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="ClientUser not found")
 
 @router.put("/{user_id}", response_model=ClientUser)
-async def update_user(user_id: int, user: ClientUser):
+async def update_user(user_id: int, user: ClientUser, token: str = Depends(verify_token)):
     try:
         updated_user = users_repository.update_user(user_id, user)
         if not updated_user:
@@ -57,7 +71,7 @@ async def update_user(user_id: int, user: ClientUser):
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 @router.delete("/{user_id}", response_model=dict)
-async def delete_user(user_id: int):
+async def delete_user(user_id: int, token: str = Depends(verify_token)):
     try:
         deleted_user = users_repository.delete_user(user_id)
         if not deleted_user:
@@ -70,21 +84,15 @@ async def delete_user(user_id: int):
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 @router.post("/login", response_model=dict)
-def login(user_data: ClientUser):
+def login(user_data: LoginClientUser, token: str = Depends(verify_token)):
     try:
         user = users_repository.login_user(user_data)
         if not user:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
-        expires_delta = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-        access_token = create_access_token(data={"sub": user_data.email}, expires_delta=expires_delta)
-
         response_data = {
-            "access_token": access_token,
-            "token_type": "bearer",
             "user_id": user.id,
             "user_name": user.name,
-#            "name":user.name,
             "email": user.email,
             "role": user.role,
             "subscription": user.subscription,
@@ -101,36 +109,27 @@ def login(user_data: ClientUser):
 
 
 @router.post("/send-otp", response_model=dict)
-async def send_otp_to_user(form_data: PhoneRequestForm):
+async def send_otp_to_user(form_data: PhoneRequestForm, token: str = Depends(verify_token)):
     user = users_repository.get_user_by_phone(form_data.phone_number)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User does not exist")
 
     users_repository.delete_otp(form_data.phone_number)
-    # Generate OTP and store it
-    otp = random.randint(1000, 9999)
-    users_repository.store_otp(form_data.phone_number, otp)
-    send_sms(form_data.phone_number, otp)
+    otp = users_repository.store_otp(form_data.phone_number)
 
-    return {"message": "OTP sent successfully"}
+    return {"message": f"OTP sent successfully: {otp}"}
 
 @router.post("/verify-otp", response_model=dict)
-async def verify_otp(form_data: OTPVerificationForm):
+async def verify_otp(form_data: OTPVerificationForm, token: str = Depends(verify_token)):
     if users_repository.validate_otp(form_data.phone_number, form_data.otp):
-        users_repository.delete_otp(form_data.phone_number)
         user = users_repository.get_user_by_phone(form_data.phone_number)
         
         if not user:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
 
-        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-        access_token = create_access_token(
-            data={"sub": form_data.phone_number}, expires_delta=access_token_expires
-        )
+        users_repository.delete_otp(form_data.phone_number)
         
         response_data = {
-            "access_token": access_token,
-            "token_type": "bearer",
             "user_id": user.id,
             "user_name": user.name,
             "email": user.email,
@@ -149,7 +148,7 @@ async def verify_otp(form_data: OTPVerificationForm):
     
     
 @router.post("/send-email-otp", response_model=dict)
-async def send_otp_to_email(form_data: EmailRequestForm):
+async def send_otp_to_email(form_data: EmailRequestForm, token: str = Depends(verify_token)):
     user = users_repository.get_user_by_email(form_data.email)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User does not exist")
@@ -157,12 +156,12 @@ async def send_otp_to_email(form_data: EmailRequestForm):
     users_repository.delete_otp(form_data.email)  # Use email in the phone_number column
     otp = random.randint(1000, 9999)
     users_repository.store_otp(form_data.email, otp)  # Store email as phone_number
-    send_email(form_data.email, otp)
+    #send_email(form_data.email, otp)
 
     return {"message": "OTP sent successfully to email"}
 
 @router.post("/verify-email-otp", response_model=dict)
-async def verify_email_otp(form_data: EmailOTPVerificationForm):
+async def verify_email_otp(form_data: EmailOTPVerificationForm, token: str = Depends(verify_token)):
     if users_repository.validate_otp(form_data.email, form_data.otp):  # Validate using email as phone_number
         users_repository.delete_otp(form_data.email)
         user = users_repository.get_user_by_email(form_data.email)
@@ -170,14 +169,7 @@ async def verify_email_otp(form_data: EmailOTPVerificationForm):
         if not user:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
 
-        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-        access_token = create_access_token(
-            data={"sub": form_data.email}, expires_delta=access_token_expires
-        )
-
         response_data = {
-            "access_token": access_token,
-            "token_type": "bearer",
             "user_id": user.id,
             "user_name": user.name,
             "email": user.email,
