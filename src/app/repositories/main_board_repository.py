@@ -6,6 +6,7 @@ from app.models.main_board import MainBoard
 from app.models.main_board_access import MainBoardAccess
 from app.models.permissions import MainBoardPermission
 from app.models.client_user import ClientUser
+from app.models.boards import Boards
 from fastapi import Depends
 import os
 from dotenv import load_dotenv
@@ -121,8 +122,6 @@ class MainBoardRepository:
         
         results = self.session.exec(statement).all()
         
-
-        
         # Group permissions by user
         users_dict = {}
         for user, access in results:
@@ -186,8 +185,8 @@ class MainBoardRepository:
         return list(results)
 
     def get_all_info_tree(self, client_user_id: int) -> List[Dict[str, Any]]:
-        statement = select(MainBoard, Board).outerjoin(
-            Board, MainBoard.id == Board.main_board_id
+        statement = select(MainBoard, Boards).outerjoin(
+            Boards, MainBoard.id == Boards.main_board_id
         ).where(
             or_(
                 MainBoard.client_user_id == client_user_id,

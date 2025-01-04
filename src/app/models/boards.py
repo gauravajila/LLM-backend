@@ -1,17 +1,19 @@
 # app/models/boards.py
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel
+from sqlmodel import SQLModel, Field
 
-class Boards(BaseModel):
-    id: Optional[int] = None
-    main_board_id: int
+class Boards(SQLModel, table=True):
+    __tablename__ = "Boards"
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+    main_board_id: int = Field(foreign_key="MainBoard.id")
     name: str
-    is_active : Optional[bool] = True
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
+    is_active: bool = Field(default=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
     class Config:
-        orm_mode = True
         json_schema_extra = {
             "examples": [
                 {
