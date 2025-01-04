@@ -1,181 +1,210 @@
-# repositories/main_board_access_repository.py
-from typing import List, Optional, Dict, Any, Tuple
-from sqlalchemy import text
+from typing import List, Optional, Dict, Any
+from sqlmodel import Session, select, and_, or_, join
 from datetime import datetime
-from app.repositories.base_repository import BaseRepository
 from app.models.main_board_access import MainBoardAccess
+from app.models.main_board import MainBoard
+from app.models.client_user import ClientUser
 from app.models.permissions import MainBoardPermission
+from fastapi import Depends
+import os
+from dotenv import load_dotenv
+from sqlmodel import Session, select, create_engine, or_
 
-class MainBoardAccessRepository(BaseRepository):
+# Load environment variables from .env file
+load_dotenv()
+
+class MainBoardAccessRepository:
     def __init__(self):
-        super().__init__('MainBoardAccess')
-        create_table_query = text("""
-            CREATE TABLE IF NOT EXISTS MainBoardAccess (
-                id SERIAL PRIMARY KEY,
-                main_board_id INT REFERENCES MainBoard(id) ON DELETE CASCADE,
-                client_user_id INT REFERENCES ClientUsers(id) ON DELETE CASCADE,
-                permission VARCHAR(50),
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(main_board_id, client_user_id, permission)
-            );
-        """)
-        self.create_table(create_table_query)
+        
+        # Get the values from the environment
+        db_user = os.getenv("DB_USER")
+        db_password = os.getenv("DB_PASSWORD")
+        db_host = os.getenv("DB_HOST")
+        db_port = os.getenv("DB_PORT")
+        db_name = os.getenv("DB_NAME")
 
+        # Construct the database URL
+        self.database_url = f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
+        
+        self.engine = create_engine(
+            self.database_url,
+            echo=True  # Set to False in production
+        ) 
+        MainBoardAccess.metadata.create_all(self.engine)
+        self.session = Session(self.engine)
+        
     def grant_permission(self, main_board_id: int, client_user_id: int, permission: MainBoardPermission) -> MainBoardAccess:
-        query = text("""
-            INSERT INTO MainBoardAccess (main_board_id, client_user_id, permission)
-            VALUES (:main_board_id, :client_user_id, :permission)
-            ON CONFLICT (main_board_id, client_user_id, permission) 
-            DO UPDATE SET updated_at = CURRENT_TIMESTAMP
-            RETURNING id, main_board_id, client_user_id, permission, created_at, updated_at;
-        """)
-        values = {
-            "main_board_id": main_board_id,
-            "client_user_id": client_user_id,
-            "permission": permission.value
-        }
-        result = self.execute_query(query, values)
-        return MainBoardAccess(**dict(zip(MainBoardAccess.__annotations__, result)))
+        """
+        Grant a specific permission to a user for a main board.
+        
+        Args:
+            main_board_id (int): The ID of the main board
+            client_user_id (int): The ID of the user
+            permission (MainBoardPermission): The permission to grant
+            
+        Returns:
+            MainBoardAccess: The created or updated access record
+        """
+        access = MainBoardAccess(
+            main_board_id=main_board_id,
+            client_user_id=client_user_id,
+            permission=permission.value
+        )
+        
+        # Check for existing permission
+        statement = select(MainBoardAccess).where(
+            and_(
+                MainBoardAccess.main_board_id == main_board_id,
+                MainBoardAccess.client_user_id == client_user_id,
+                MainBoardAccess.permission == permission.value
+            )
+        )
+        existing = self.session.exec(statement).first()
+        
+        if existing:
+            existing.updated_at = datetime.utcnow()
+            self.session.add(existing)
+            access = existing
+        else:
+            self.session.add(access)
+            
+        self.session.commit()
+        self.session.refresh(access)
+        return access
 
     def revoke_permission(self, main_board_id: int, client_user_id: int, permission: MainBoardPermission) -> Optional[MainBoardAccess]:
-        query = text("""
-            DELETE FROM MainBoardAccess 
-            WHERE main_board_id = :main_board_id 
-            AND client_user_id = :client_user_id 
-            AND permission = :permission
-            RETURNING id, main_board_id, client_user_id, permission, created_at, updated_at;
-        """)
-        values = {
-            "main_board_id": main_board_id,
-            "client_user_id": client_user_id,
-            "permission": permission.value
-        }
-        result = self.execute_query(query, values)
-        return MainBoardAccess(**dict(zip(MainBoardAccess.__annotations__, result))) if result else None
+        """
+        Revoke a specific permission from a user for a main board.
+        
+        Args:
+            main_board_id (int): The ID of the main board
+            client_user_id (int): The ID of the user
+            permission (MainBoardPermission): The permission to revoke
+            
+        Returns:
+            Optional[MainBoardAccess]: The deleted access record if found, None otherwise
+        """
+        statement = select(MainBoardAccess).where(
+            and_(
+                MainBoardAccess.main_board_id == main_board_id,
+                MainBoardAccess.client_user_id == client_user_id,
+                MainBoardAccess.permission == permission.value
+            )
+        )
+        access = self.session.exec(statement).first()
+        
+        if access:
+            self.session.delete(access)
+            self.session.commit()
+            
+        return access
 
     def check_permission(self, main_board_id: int, client_user_id: int, permission: MainBoardPermission) -> bool:
-        # First check if user is the owner
-        owner_query = text("""
-            SELECT 1 FROM MainBoard 
-            WHERE id = :main_board_id AND client_user_id = :client_user_id;
-        """)
+        """
+        Check if a user has a specific permission for a main board.
         
-        owner_result = self.execute_query(owner_query, {
-            "main_board_id": main_board_id,
-            "client_user_id": client_user_id
-        })
-        
-        if owner_result:
+        Args:
+            main_board_id (int): The ID of the main board
+            client_user_id (int): The ID of the user
+            permission (MainBoardPermission): The permission to check
+            
+        Returns:
+            bool: True if user has permission, False otherwise
+        """
+        # Check if user is owner
+        owner_check = select(MainBoard).where(
+            and_(
+                MainBoard.id == main_board_id,
+                MainBoard.client_user_id == client_user_id
+            )
+        )
+        if self.session.exec(owner_check).first():
             return True
             
         # Check specific permission
-        query = text("""
-            SELECT 1 FROM MainBoardAccess 
-            WHERE main_board_id = :main_board_id 
-            AND client_user_id = :client_user_id 
-            AND permission = :permission;
-        """)
-        values = {
-            "main_board_id": main_board_id,
-            "client_user_id": client_user_id,
-            "permission": permission.value
-        }
-        result = self.execute_query(query, values)
-        return bool(result)
+        statement = select(MainBoardAccess).where(
+            and_(
+                MainBoardAccess.main_board_id == main_board_id,
+                MainBoardAccess.client_user_id == client_user_id,
+                MainBoardAccess.permission == permission.value
+            )
+        )
+        return bool(self.session.exec(statement).first())
 
     def get_board_permissions(self, main_board_id: int) -> List[MainBoardAccess]:
-        query = text("""
-            SELECT id, main_board_id, client_user_id, permission, created_at, updated_at
-            FROM MainBoardAccess 
-            WHERE main_board_id = :main_board_id;
-        """)
-        results = self.execute_query_all(query, {"main_board_id": main_board_id})
-        return [MainBoardAccess(**dict(zip(MainBoardAccess.__annotations__, result))) for result in results]
+        """
+        Get all permission records for a specific main board.
+        
+        Args:
+            main_board_id (int): The ID of the main board
+            
+        Returns:
+            List[MainBoardAccess]: List of all permission records
+        """
+        statement = select(MainBoardAccess).where(
+            MainBoardAccess.main_board_id == main_board_id
+        )
+        return list(self.session.exec(statement).all())
 
     def get_user_permissions(self, client_user_id: int) -> List[MainBoardAccess]:
-        query = text("""
-            SELECT id, main_board_id, client_user_id, permission, created_at, updated_at
-            FROM MainBoardAccess 
-            WHERE client_user_id = :client_user_id;
-        """)
-        results = self.execute_query_all(query, {"client_user_id": client_user_id})
-        return [MainBoardAccess(**dict(zip(MainBoardAccess.__annotations__, result))) for result in results]
+        """
+        Get all permission records for a specific user.
+        
+        Args:
+            client_user_id (int): The ID of the user
+            
+        Returns:
+            List[MainBoardAccess]: List of all permission records
+        """
+        statement = select(MainBoardAccess).where(
+            MainBoardAccess.client_user_id == client_user_id
+        )
+        return list(self.session.exec(statement).all())
     
-    
-    def get_user_board_permissions(
-        self, 
-        main_board_id: int, 
-        client_user_id: int
-    ) -> Dict[str, Any]:
+    def get_user_board_permissions(self, main_board_id: int, client_user_id: int) -> Dict[str, Any]:
         """
         Get all permissions a user has for a specific board along with user details.
-        Returns a dictionary containing user information and their permissions.
         
         Args:
             main_board_id (int): The ID of the main board
             client_user_id (int): The ID of the user
             
         Returns:
-            Dict containing:
-            - user_id: int
-            - user_name: str
-            - user_email: str
-            - permissions: List[MainBoardPermission]
-            - is_owner: bool
+            Dict containing user information and permissions
         """
-        # First, check if user is the owner
-        owner_query = text("""
-            SELECT 
-                cu.id as user_id,
-                cu.name as user_name,
-                cu.email as user_email,
-                TRUE as is_owner
-            FROM MainBoard mb
-            JOIN ClientUsers cu ON mb.client_user_id = cu.id
-            WHERE mb.id = :main_board_id 
-            AND mb.client_user_id = :client_user_id;
-        """)
-        
-        owner_result = self.execute_query(owner_query, {
-            "main_board_id": main_board_id,
-            "client_user_id": client_user_id
-        })
+        # Check if user is owner
+        owner_statement = select(MainBoard, ClientUser).join(
+            ClientUser, MainBoard.client_user_id == ClientUser.id
+        ).where(
+            and_(
+                MainBoard.id == main_board_id,
+                MainBoard.client_user_id == client_user_id
+            )
+        )
+        owner_result = self.session.exec(owner_statement).first()
         
         if owner_result:
-            # If user is owner, they have all permissions
+            main_board, user = owner_result
             return {
-                "user_id": owner_result[0],
-                "user_name": owner_result[1],
-                "user_email": owner_result[2],
+                "user_id": user.id,
+                "user_name": user.name,
+                "user_email": user.email,
                 "is_owner": True,
                 "permissions": [perm for perm in MainBoardPermission]
             }
-            
-        # If not owner, get specific permissions
-        permissions_query = text("""
-            SELECT 
-                cu.id as user_id,
-                cu.name as user_name,
-                cu.email as user_email,
-                ARRAY_AGG(DISTINCT mba.permission) as permissions,
-                FALSE as is_owner
-            FROM MainBoardAccess mba
-            JOIN ClientUsers cu ON mba.client_user_id = cu.id
-            WHERE mba.main_board_id = :main_board_id 
-            AND mba.client_user_id = :client_user_id
-            GROUP BY cu.id, cu.name, cu.email;
-        """)
         
-        values = {
-            "main_board_id": main_board_id,
-            "client_user_id": client_user_id
-        }
+        # Get user permissions
+        statement = select(ClientUser, MainBoardAccess).join(
+            MainBoardAccess, ClientUser.id == MainBoardAccess.client_user_id
+        ).where(
+            and_(
+                MainBoardAccess.main_board_id == main_board_id,
+                MainBoardAccess.client_user_id == client_user_id
+            )
+        )
+        results = self.session.exec(statement).all()
         
-        result = self.execute_query(permissions_query, values)
-        
-        if not result:
-            # User has no permissions
+        if not results:
             return {
                 "user_id": client_user_id,
                 "user_name": None,
@@ -183,18 +212,15 @@ class MainBoardAccessRepository(BaseRepository):
                 "is_owner": False,
                 "permissions": []
             }
-            
-        # Convert string permissions to MainBoardPermission enum
-        permissions = [
-            MainBoardPermission(perm) 
-            for perm in result[3] 
-            if perm in [p.value for p in MainBoardPermission]
-        ]
+        
+        # First result contains user info
+        user, _ = results[0]
+        permissions = [MainBoardPermission(access.permission) for _, access in results]
         
         return {
-            "user_id": result[0],
-            "user_name": result[1],
-            "user_email": result[2],
+            "user_id": user.id,
+            "user_name": user.name,
+            "user_email": user.email,
             "is_owner": False,
             "permissions": permissions
         }
@@ -207,57 +233,46 @@ class MainBoardAccessRepository(BaseRepository):
             main_board_id (int): The ID of the main board
             
         Returns:
-            List of dictionaries containing user information and their permissions
+            List[Dict[str, Any]]: List of dictionaries containing user information and permissions
         """
-        query = text("""
-            WITH owner AS (
-                SELECT 
-                    cu.id as user_id,
-                    cu.name as user_name,
-                    cu.email as user_email,
-                    ARRAY['view', 'edit', 'delete', 'create'] as permissions,
-                    TRUE as is_owner
-                FROM MainBoard mb
-                JOIN ClientUsers cu ON mb.client_user_id = cu.id
-                WHERE mb.id = :main_board_id
-            ),
-            other_users AS (
-                SELECT 
-                    cu.id as user_id,
-                    cu.name as user_name,
-                    cu.email as user_email,
-                    ARRAY_AGG(DISTINCT mba.permission) as permissions,
-                    FALSE as is_owner
-                FROM MainBoardAccess mba
-                JOIN ClientUsers cu ON mba.client_user_id = cu.id
-                WHERE mba.main_board_id = :main_board_id
-                GROUP BY cu.id, cu.name, cu.email
-            )
-            SELECT * FROM owner
-            UNION ALL
-            SELECT * FROM other_users
-            ORDER BY is_owner DESC, user_name;
-        """)
+        # Get owner information
+        owner_statement = select(MainBoard, ClientUser).join(
+            ClientUser, MainBoard.client_user_id == ClientUser.id
+        ).where(MainBoard.id == main_board_id)
+        owner_result = self.session.exec(owner_statement).first()
         
-        results = self.execute_query_all(query, {"main_board_id": main_board_id})
-        
-        users_permissions = []
-        for result in results:
-            permissions = [
-                MainBoardPermission(perm) 
-                for perm in result[3] 
-                if perm in [p.value for p in MainBoardPermission]
-            ]
-            
-            users_permissions.append({
-                "user_id": result[0],
-                "user_name": result[1],
-                "user_email": result[2],
-                "permissions": permissions,
-                "is_owner": result[4]
+        results = []
+        if owner_result:
+            main_board, user = owner_result
+            results.append({
+                "user_id": user.id,
+                "user_name": user.name,
+                "user_email": user.email,
+                "permissions": [perm for perm in MainBoardPermission],
+                "is_owner": True
             })
-            
-        return users_permissions
+        
+        # Get other users' permissions
+        statement = select(ClientUser, MainBoardAccess).join(
+            MainBoardAccess, ClientUser.id == MainBoardAccess.client_user_id
+        ).where(MainBoardAccess.main_board_id == main_board_id)
+        
+        user_permissions = {}
+        for user, access in self.session.exec(statement).all():
+            if user.id not in user_permissions:
+                user_permissions[user.id] = {
+                    "user_id": user.id,
+                    "user_name": user.name,
+                    "user_email": user.email,
+                    "permissions": [],
+                    "is_owner": False
+                }
+            user_permissions[user.id]["permissions"].append(MainBoardPermission(access.permission))
+        
+        results.extend(list(user_permissions.values()))
+        results.sort(key=lambda x: (not x["is_owner"], x["user_name"] or ""))
+        
+        return results
 
     def check_user_has_any_permission(self, main_board_id: int, client_user_id: int) -> bool:
         """
@@ -270,24 +285,21 @@ class MainBoardAccessRepository(BaseRepository):
         Returns:
             bool: True if user has any permissions, False otherwise
         """
-        query = text("""
-            SELECT 1
-            FROM (
-                SELECT 1
-                FROM MainBoard
-                WHERE id = :main_board_id AND client_user_id = :client_user_id
-                UNION
-                SELECT 1
-                FROM MainBoardAccess
-                WHERE main_board_id = :main_board_id 
-                AND client_user_id = :client_user_id
-                LIMIT 1
-            ) AS has_access;
-        """)
+        # Check if user is owner
+        owner_check = select(MainBoard).where(
+            and_(
+                MainBoard.id == main_board_id,
+                MainBoard.client_user_id == client_user_id
+            )
+        )
+        if self.session.exec(owner_check).first():
+            return True
         
-        result = self.execute_query(query, {
-            "main_board_id": main_board_id,
-            "client_user_id": client_user_id
-        })
-        
-        return bool(result)
+        # Check for any permissions
+        statement = select(MainBoardAccess).where(
+            and_(
+                MainBoardAccess.main_board_id == main_board_id,
+                MainBoardAccess.client_user_id == client_user_id
+            )
+        )
+        return bool(self.session.exec(statement).first())

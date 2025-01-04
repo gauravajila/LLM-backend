@@ -1,12 +1,30 @@
 # app/routers/main_board_access_router.py
-from fastapi import APIRouter, HTTPException, status
+import os
+from fastapi import APIRouter, Depends, HTTPException, status, Header, Security
+from fastapi.security import APIKeyHeader
 from typing import List, Optional
 from pydantic import BaseModel
 from enum import Enum
 from app.models.permissions import MainBoardPermission
 from app.repositories.main_board_repository import MainBoardRepository
 from app.repositories.main_board_access_repository import MainBoardAccessRepository
+from dotenv import load_dotenv
 
+# Load environment variables from .env file
+load_dotenv()
+SECRET_TOKEN = os.getenv("SECRET_TOKEN")
+
+# Define API key security scheme
+API_KEY_NAME = "X-API-Key"
+api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=True)
+
+def verify_token(x_token: str = Security(api_key_header)):
+    if x_token != SECRET_TOKEN:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing token",
+        )
+        
 # Pydantic models for request/response
 class PermissionType(str, Enum):
     VIEW = "view"
@@ -39,6 +57,7 @@ async def grant_board_permissions(
     main_board_id: int,
     permission_request: PermissionRequest,
     current_user_id: int
+    , token: str = Depends(verify_token)
 ):
     """Grant permissions to a user for a specific board"""
     try:
@@ -83,6 +102,7 @@ async def revoke_board_permissions(
     main_board_id: int,
     permission_request: PermissionRequest,
     current_user_id: int
+    , token: str = Depends(verify_token)
 ):
     """Revoke permissions from a user for a specific board"""
     try:
@@ -121,7 +141,7 @@ async def revoke_board_permissions(
         )
 
 @router.get("/{main_board_id}/users", response_model=List[UserPermissionResponse])
-async def get_board_users(main_board_id: int, current_user_id: int):
+async def get_board_users(main_board_id: int, current_user_id: int, token: str = Depends(verify_token)):
     """Get all users and their permissions for a specific board"""
     try:
         # Verify if current user has view rights
@@ -155,6 +175,7 @@ async def batch_update_permissions(
     main_board_id: int,
     batch_request: BatchPermissionRequest,
     current_user_id: int
+    , token: str = Depends(verify_token)
 ):
     """Update permissions for multiple users in a single request"""
     try:
@@ -197,7 +218,7 @@ async def batch_update_permissions(
         )
 
 @router.get("/user/{user_id}/boards", response_model=List[dict])
-async def get_user_accessible_boards(user_id: int, current_user_id: int):
+async def get_user_accessible_boards(user_id: int, current_user_id: int, token: str = Depends(verify_token)):
     """Get all boards that a user has access to, with their permission levels"""
     try:
         # Only allow users to view their own permissions or admin users

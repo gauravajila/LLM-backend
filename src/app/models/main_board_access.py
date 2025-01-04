@@ -1,13 +1,18 @@
 # models/main_board_access.py
-from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
+from sqlmodel import SQLModel, Field, Relationship
+from app.models.main_board import MainBoard
 
-@dataclass
-class MainBoardAccess:
-    id: Optional[int]
-    main_board_id: int
-    client_user_id: int
-    permission: str
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
+class MainBoardAccess(SQLModel, table=True):
+    __tablename__ = "MainBoardAccess"
+    
+    # id: Optional[int] = Field(default=None, primary_key=True)
+    main_board_id: int = Field(foreign_key="MainBoard.id", primary_key=True)
+    client_user_id: int = Field(foreign_key="ClientUsers.id", primary_key=True)
+    permission: str = Field(primary_key=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    
+    # Relationships
+    main_board: MainBoard = Relationship(back_populates="accesses")
