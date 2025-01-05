@@ -1,8 +1,8 @@
 # app/models/boards.py
 from datetime import datetime
 from typing import Optional
-from sqlmodel import SQLModel, Field
-
+from sqlmodel import SQLModel, Field, Relationship
+from typing import List
 class Boards(SQLModel, table=True):
     __tablename__ = "Boards"
     
@@ -13,6 +13,9 @@ class Boards(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
+    # Add relationship to board access
+    accesses: List["BoardAccess"] = Relationship(back_populates="board")
+    
     class Config:
         json_schema_extra = {
             "examples": [

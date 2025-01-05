@@ -16,6 +16,9 @@ from app.instructions import get_ai_documentation_instruction
 import re
 import json
 from app.authentication import verify_token
+import os
+from dotenv import load_dotenv
+load_dotenv()
 
 router = APIRouter(prefix="/data-management-table", tags=["Data Management Tables"])
 
@@ -205,12 +208,15 @@ async def upload_file_to_table_status(
 
     # Create AI Documentation for Board with uploaded data
     board_id = status_repository.get_board_id_for_table_status_id(data_management_table_id)
-    llm = ChatOpenAI(temperature=0, model="gpt-3.5-turbo")
+    llm = ChatOpenAI(temperature=os.getenv("OPENAI_TEMPERATURE"), 
+                     model=os.getenv("OPENAI_MINI_MODEL"),
+                     top_p=os.getenv('OPENAI_TOP_P'),
+                     model_kwargs={ "response_format": { "type": "json_object" } })
     ai_documentation_instruction = get_ai_documentation_instruction()
-    config = llm.invoke(ai_documentation_instruction + df.head(2).to_markdown())
-    config_output = re.sub(r'\bfalse\b', 'False', re.sub(r'\btrue\b', 'True', config.content, flags=re.IGNORECASE), flags=re.IGNORECASE)
+    config_output = llm.invoke(ai_documentation_instruction + df.head(2).to_markdown()).content
+    #config_output = re.sub(r'\bfalse\b', 'False', re.sub(r'\btrue\b', 'True', config.content, flags=re.IGNORECASE), flags=re.IGNORECASE)
     #Remove special character
-    config_output = re.sub(r"```|python|json", "",config_output, 0, re.MULTILINE)
+    #config_output = re.sub(r"```|python|json", "",config_output, 0, re.MULTILINE)
     config_output = eval(config_output)
     config_dict = config_output["configuration_details"]
     config_str = json.dumps(config_dict, indent=2)

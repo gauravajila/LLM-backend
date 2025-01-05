@@ -317,4 +317,4 @@ class TableStatusRepository:
             DataManagementTable.id == data_management_table_id
         )
         result = self.db.exec(statement).first()
-        return result[0] if result else None
+        return result if result else None

@@ -6,3 +6,9 @@ class MainBoardPermission(Enum):
     EDIT = "edit"
     DELETE = "delete"
     CREATE = "create"
+        
+class BoardPermission(Enum):
+    VIEW = "view"
+    EDIT = "edit"
+    DELETE = "delete"
+    CREATE = "create"
