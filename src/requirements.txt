@@ -20,3 +20,4 @@ loguru==0.7.2
 seaborn==0.13.2
 alembic==1.14.0
 sqlmodel==0.0.22
+minio==7.2.13
