@@ -41,6 +41,7 @@ from typing import Any
 import pandas as pd
 import numpy as np
 from multiprocessing import Pool
+from app.authentication import verify_token
 
 router = APIRouter(prefix="/prompts", tags=["Prompts"])
 
@@ -48,43 +49,43 @@ prompt_repository = PromptRepository()
 prompt_response_repository = PromptResponseRepository()
 
 @router.post("/", response_model=Prompt)
-def create_prompt_route(prompt_create: Prompt):
+def create_prompt_route(prompt_create: Prompt, token: str = Depends(verify_token)):
     new_prompt = prompt_repository.create_prompt(prompt_create)
     return new_prompt
 
 @router.get("/boards/{board_id}", response_model=List[Prompt])
-def get_prompts_for_board_route(board_id: int):
+def get_prompts_for_board_route(board_id: int, token: str = Depends(verify_token)):
     prompts = prompt_repository.get_prompts_for_board(board_id)
     return prompts
 
 @router.get("/{prompt_id}", response_model=Prompt)
-def get_prompt_route(prompt_id: int):
+def get_prompt_route(prompt_id: int, token: str = Depends(verify_token)):
     prompt = prompt_repository.get_prompt(prompt_id)
     if not prompt:
         raise HTTPException(status_code=404, detail="Prompt not found")
     return prompt
 
 @router.put("/{prompt_id}", response_model=Prompt)
-def update_prompt_route(prompt_id: int, prompt: Prompt):
+def update_prompt_route(prompt_id: int, prompt: Prompt, token: str = Depends(verify_token)):
     updated_prompt = prompt_repository.update_prompt(prompt_id, prompt)
     if not updated_prompt:
         raise HTTPException(status_code=404, detail="Prompt not found")
     return updated_prompt
 
 @router.delete("/{prompt_id}", response_model=Prompt)
-def delete_prompt_route(prompt_id: int):
+def delete_prompt_route(prompt_id: int, token: str = Depends(verify_token)):
     deleted_prompt = prompt_repository.delete_prompt(prompt_id)
     if not deleted_prompt:
         raise HTTPException(status_code=404, detail="Prompt not found")
     return deleted_prompt
 
 @router.get("/{main_board_id}/{board_id}/prompts", response_model=List[Prompt])
-async def get_prompts_for_board_in_main_board(main_board_id: int, board_id: int):
+async def get_prompts_for_board_in_main_board(main_board_id: int, board_id: int, token: str = Depends(verify_token)):
     prompts = prompt_repository.get_prompts_for_board_in_main_board(main_board_id, board_id)
     return prompts
 
 @router.post("/run_prompt")
-async def run_prompt(input_text: str, board_id: str, file: UploadFile):
+async def run_prompt(input_text: str, board_id: str, file: UploadFile, token: str = Depends(verify_token)):
     try:
         response_content = "Please review and modify the prompt with more specifics."
         start_time = datetime.now()
@@ -232,7 +233,7 @@ class RePromptService:
 
 
 @router.post("/re_prompt")
-async def run_re_prompt(input_text: str, board_id: str):
+async def run_re_prompt(input_text: str, board_id: str, token: str = Depends(verify_token)):
     re_prompt_service = RePromptService(prompt_repository, ChatOpenAI(temperature=0, model="gpt-3.5-turbo"))
     return re_prompt_service.run_re_prompt(input_text, board_id)
 
@@ -317,7 +318,7 @@ class ResponseContent(BaseModel):
 
 
 @router.post("/run_prompt_v1")
-async def run_prompt_v1(input_text: str, board_id: str, use_cache: bool = True) -> JSONResponse:
+async def run_prompt_v1(input_text: str, board_id: str, use_cache: bool = True, token: str = Depends(verify_token)) -> JSONResponse:
     """
     Run the prompt v2 pipeline.
 
@@ -619,7 +620,7 @@ class PromptFacade:
         return result
 
 @router.post("/run_prompt_v2")
-async def run_prompt_v2(input_text: str, board_id: str, user_name:str = '', use_cache: bool = True):
+async def run_prompt_v2(input_text: str, board_id: str, user_name:str = '', use_cache: bool = True, token: str = Depends(verify_token)):
     """
     API endpoint to run prompt, validate, generate graphs, and extract insights.
     """

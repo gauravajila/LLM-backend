@@ -3,13 +3,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from typing import List
 from app.repositories.ai_documentation_repository import AiDocumentationRepository
 from app.models.ai_documentation import AiDocumentation
+from app.authentication import verify_token
 
 router = APIRouter(prefix="/ai-documentation", tags=["AI Documentation"])
 
 ai_documentation_repository = AiDocumentationRepository()
 
 @router.post("/", response_model=AiDocumentation)
-async def create_ai_documentation(ai_documentation: AiDocumentation):
+async def create_ai_documentation(ai_documentation: AiDocumentation, token: str = Depends(verify_token)):
     try:
         # Attempt to create AI Documentation
         created_documentation = ai_documentation_repository.create_ai_documentation(ai_documentation)
@@ -23,26 +24,26 @@ async def create_ai_documentation(ai_documentation: AiDocumentation):
             raise HTTPException(status_code=500, detail="AI Documentation API Fails to process")
 
 @router.get("/", response_model=List[AiDocumentation])
-async def get_all_ai_documentation():
+async def get_all_ai_documentation(token: str = Depends(verify_token)):
     all_documentation = ai_documentation_repository.get_all_ai_documentation()
     return all_documentation
 
 @router.get("/{doc_id}", response_model=AiDocumentation)
-async def get_ai_documentation(doc_id: int):
+async def get_ai_documentation(doc_id: int, token: str = Depends(verify_token)):
     documentation = ai_documentation_repository.get_ai_documentation(doc_id)
     if not documentation:
         raise HTTPException(status_code=404, detail="AI Documentation not found")
     return documentation
 
 @router.put("/{doc_id}", response_model=AiDocumentation)
-async def update_ai_documentation(doc_id: int, ai_documentation: AiDocumentation):
+async def update_ai_documentation(doc_id: int, ai_documentation: AiDocumentation, token: str = Depends(verify_token)):
     updated_documentation = ai_documentation_repository.update_ai_documentation(doc_id, ai_documentation)
     if not updated_documentation:
         raise HTTPException(status_code=404, detail="AI Documentation not found")
     return updated_documentation
 
 @router.delete("/{doc_id}", response_model=dict)
-async def delete_ai_documentation(doc_id: int):
+async def delete_ai_documentation(doc_id: int, token: str = Depends(verify_token)):
     deleted_documentation = ai_documentation_repository.delete_ai_documentation(doc_id)
     if not deleted_documentation:
         raise HTTPException(status_code=404, detail="AI Documentation not found")

@@ -15,21 +15,22 @@ from langchain_openai import ChatOpenAI, OpenAI
 from app.instructions import get_ai_documentation_instruction
 import re
 import json
+from app.authentication import verify_token
 
 router = APIRouter(prefix="/data-management-table", tags=["Data Management Tables"])
 
 @router.post("/create", response_model=DataManagementTable)
-async def create_data_management_table(data_management_table: DataManagementTable):
+async def create_data_management_table(data_management_table: DataManagementTable, token: str = Depends(verify_token)):
     repository = DataManagementTableRepository()
     return repository.create_data_management_table(data_management_table)
 
 @router.get("/all", response_model=List[DataManagementTable])
-async def get_all_data_management_tables():
+async def get_all_data_management_tables(token: str = Depends(verify_token)):
     repository = DataManagementTableRepository()
     return repository.get_data_management_tables()
 
 @router.get("/get_all_tables_with_files", response_model=List[dict])
-async def get_all_data_management_tables():
+async def get_all_data_management_tables(token: str = Depends(verify_token)):
     repository = DataManagementTableRepository()
     data_management_tables = repository.get_data_management_tables()
     repository = TableStatusRepository()
@@ -65,7 +66,7 @@ async def get_all_data_management_tables():
     return result
 
 @router.get("/get_all_tables_with_files/{data_table_id}", response_model=List[dict])
-async def get_data_management_table_with_files(data_table_id: int):
+async def get_data_management_table_with_files(data_table_id: int, token: str = Depends(verify_token)):
     repository = DataManagementTableRepository()
     data_table = repository.get_data_management_table(data_table_id)
 
@@ -103,32 +104,32 @@ async def get_data_management_table_with_files(data_table_id: int):
 #To do Download files API
 
 @router.get("/{table_id}", response_model=DataManagementTable)
-async def get_data_management_table(table_id: int):
+async def get_data_management_table(table_id: int, token: str = Depends(verify_token)):
     repository = DataManagementTableRepository()
     return repository.get_data_management_table(table_id)
 
 @router.put("/{table_id}", response_model=DataManagementTable)
-async def update_data_management_table(table_id: int, data_management_table: DataManagementTable):
+async def update_data_management_table(table_id: int, data_management_table: DataManagementTable, token: str = Depends(verify_token)):
     repository = DataManagementTableRepository()
     return repository.update_data_management_table(table_id, data_management_table)
 
 @router.delete("/{table_id}", response_model=DataManagementTable)
-async def delete_data_management_table(table_id: int):
+async def delete_data_management_table(table_id: int, token: str = Depends(verify_token)):
     repository = DataManagementTableRepository()
     return repository.delete_data_management_table(table_id)
 
 @router.get("/status/all", response_model=List[TableStatus])
-async def get_all_table_status():
+async def get_all_table_status(token: str = Depends(verify_token)):
     repository = TableStatusRepository()
     return repository.get_all_table_status()
 
 @router.get("/status/{table_id}", response_model=Optional[TableStatus])
-async def get_table_status_by_id(table_id: int):
+async def get_table_status_by_id(table_id: int, token: str = Depends(verify_token)):
     repository = TableStatusRepository()
     return repository.get_table_status_by_id(table_id)
 
 @router.put("/status/approve/{table_id}", response_model=TableStatus)
-async def update_approval_status(table_id: int, new_approval_status: bool):
+async def update_approval_status(table_id: int, new_approval_status: bool, token: str = Depends(verify_token)):
     repository = TableStatusRepository()
     return repository.update_approval_status(table_id, new_approval_status)
 
@@ -136,7 +137,8 @@ async def update_approval_status(table_id: int, new_approval_status: bool):
 async def upload_file_to_table_status_for_rag(
     data_management_table_id: int, 
     month_year: str = Form(...),  # Accept month_year as a form field
-    file: UploadFile = File(...)):
+    file: UploadFile = File(...), 
+    token: str = Depends(verify_token)):
     status_repository = TableStatusRepository()
 
     # Read and process the uploaded file
@@ -168,8 +170,8 @@ async def upload_file_to_table_status_for_rag(
 async def upload_file_to_table_status(
     data_management_table_id: int, 
     month_year: str = Form(...),  # Accept month_year as a form field
-    file: UploadFile = File(...),
-    
+    file: UploadFile = File(...), 
+    token: str = Depends(verify_token)
     #approved: bool = False  # You can customize this default value based on your requirements
 ):
     status_repository = TableStatusRepository()
@@ -239,7 +241,7 @@ async def upload_file_to_table_status(
 #     return downloaded_files
 
 @router.delete("/status/delete/{table_id}", response_model=TableStatus)
-async def delete_table_status(table_id: int):
+async def delete_table_status(table_id: int, token: str = Depends(verify_token)):
     repository = TableStatusRepository()
     deleted_status = repository.delete_table_status(table_id)
     if not deleted_status:

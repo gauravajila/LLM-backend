@@ -8,22 +8,7 @@ from enum import Enum
 from app.models.permissions import MainBoardPermission
 from app.repositories.main_board_repository import MainBoardRepository
 from app.repositories.main_board_access_repository import MainBoardAccessRepository
-from dotenv import load_dotenv
-
-# Load environment variables from .env file
-load_dotenv()
-SECRET_TOKEN = os.getenv("SECRET_TOKEN")
-
-# Define API key security scheme
-API_KEY_NAME = "X-API-Key"
-api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=True)
-
-def verify_token(x_token: str = Security(api_key_header)):
-    if x_token != SECRET_TOKEN:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or missing token",
-        )
+from app.authentication import verify_token
         
 # Pydantic models for request/response
 class PermissionType(str, Enum):
