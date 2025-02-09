@@ -47,6 +47,17 @@ class DataManagementTableRepository:
         )
         self.bucket_name = "customer-document-storage"
         self._ensure_bucket_exists()
+        
+    def __init__(self, session: Session):
+        self.session = session
+
+    def delete_table_status_by_data_management_table_id(self, data_management_table_id: int):
+        try:
+            self.session.query(TableStatus).filter(TableStatus.data_management_table_id == data_management_table_id).delete()
+            self.session.commit()
+        except Exception as e:
+            self.session.rollback()
+            raise e
 
     def _ensure_bucket_exists(self):
         try:

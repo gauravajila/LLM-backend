@@ -1,5 +1,8 @@
 # repositories/main_board_repository.py
+# from http.client import HTTPException
 from typing import List, Optional, Dict, Any
+
+from requests import delete
 from sqlmodel import Session, select, or_, and_
 from datetime import datetime
 from app.models.main_board import MainBoard
@@ -8,6 +11,7 @@ from app.models.permissions import MainBoardPermission
 from app.models.client_user import ClientUser
 from app.models.boards import Boards
 from fastapi import Depends
+from fastapi import HTTPException
 import os
 from dotenv import load_dotenv
 from sqlmodel import Session, select, create_engine, or_
@@ -41,6 +45,9 @@ class MainBoardRepository:
         self.session = Session(self.engine)
 
     def create_main_board(self, main_board: MainBoard, client_user_id: int) -> MainBoard:
+        #Add condition here check if client_user_id role is ADMIN
+        #There will be no main_board_id
+        
         main_board.client_user_id = client_user_id
         with Session(self.engine) as session:
             session.add(main_board)
@@ -83,33 +90,57 @@ class MainBoardRepository:
         return db_main_board
 
     def delete_main_board(self, main_board_id: int, client_user_id: int) -> Optional[MainBoard]:
-        if not self.access_repository.check_permission(main_board_id, client_user_id, MainBoardPermission.DELETE):
-            return None
-            
-        main_board = self.get_main_board(main_board_id, client_user_id)
-        if not main_board:
-            return None
-            
-        self.session.delete(main_board)
-        self.session.commit()
-        return main_board
+            if not self.access_repository.check_permission(main_board_id, client_user_id, MainBoardPermission.DELETE):
+                return None
+                
+            with Session(self.engine) as session:
+                try:
+                    # Fetch the MainBoard
+                    main_board = session.exec(
+                        select(MainBoard).where(MainBoard.id == main_board_id)
+                    ).first()
+
+                    if not main_board:
+                        return None  # Return if MainBoard doesn't exist
+
+                    # Delete related MainBoardAccess records to prevent FK constraint errors
+                    session.exec(
+                        delete(MainBoardAccess).where(MainBoardAccess.main_board_id == main_board_id)
+                    )
+                    session.commit()  # Ensure access records are deleted before proceeding
+
+                    # Delete the MainBoard
+                    session.delete(main_board)
+                    session.commit()  # Commit deletion
+
+                    return main_board
+
+                except Exception as e:
+                    session.rollback()  # Rollback in case of any error
+                    raise HTTPException(500, f"An error occurred: {str(e)}")  # Fixed exception format
 
     def get_all_main_boards(self, client_user_id: int) -> List[MainBoard]:
-        statement = select(MainBoard).where(
-            or_(
-                MainBoard.client_user_id == client_user_id,
-                MainBoard.id.in_(
-                    select(MainBoardAccess.main_board_id).where(
-                        and_(
-                            MainBoardAccess.client_user_id == client_user_id,
-                            MainBoardAccess.permission == MainBoardPermission.VIEW.value
+        with Session(self.engine) as session:
+            try:
+                statement = select(MainBoard).where(
+                    or_(
+                        MainBoard.client_user_id == client_user_id,
+                        MainBoard.id.in_(
+                            select(MainBoardAccess.main_board_id).where(
+                                and_(
+                                    MainBoardAccess.client_user_id == client_user_id,
+                                    MainBoardAccess.permission == MainBoardPermission.VIEW.value
+                                )
+                            )
                         )
                     )
                 )
-            )
-        )
-        results = self.session.exec(statement).all()
-        return list(results)
+                results = session.exec(statement).all()
+                return list(results)
+            except Exception as e:
+                session.rollback()
+                raise e
+
 
     def get_board_users(self, main_board_id: int, client_user_id: int) -> Optional[List[Dict[str, Any]]]:
         if not self.access_repository.check_permission(main_board_id, client_user_id, MainBoardPermission.VIEW):
@@ -185,23 +216,28 @@ class MainBoardRepository:
         return list(results)
 
     def get_all_info_tree(self, client_user_id: int) -> List[Dict[str, Any]]:
-        statement = select(MainBoard, Boards).outerjoin(
-            Boards, MainBoard.id == Boards.main_board_id
-        ).where(
-            or_(
-                MainBoard.client_user_id == client_user_id,
-                MainBoard.id.in_(
-                    select(MainBoardAccess.main_board_id).where(
-                        and_(
-                            MainBoardAccess.client_user_id == client_user_id,
-                            MainBoardAccess.permission == MainBoardPermission.VIEW.value
+        try:
+            statement = select(MainBoard, Boards).outerjoin(
+                Boards, MainBoard.id == Boards.main_board_id
+            ).where(
+                or_(
+                    MainBoard.client_user_id == client_user_id,
+                    MainBoard.id.in_(
+                        select(MainBoardAccess.main_board_id).where(
+                            and_(
+                                MainBoardAccess.client_user_id == client_user_id,
+                                MainBoardAccess.permission == MainBoardPermission.VIEW.value
+                            )
                         )
                     )
                 )
             )
-        )
-        results = self.session.exec(statement).all()
-        return self.convert_to_tree_structure(results, client_user_id)
+            results = self.session.exec(statement).all()
+            return self.convert_to_tree_structure(results, client_user_id)
+        except Exception as e:
+            self.session.rollback()  # Rollback transaction if an error occurs
+            raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
+
 
     def get_filtered_info_tree(self, client_user_id: int, filter_params: Dict[str, Any]) -> List[Dict[str, Any]]:
         conditions = []

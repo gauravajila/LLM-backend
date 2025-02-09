@@ -28,7 +28,6 @@ async def get_all_main_boards(client_user_id: int, token: str = Depends(verify_t
     main_boards = main_board_repository.get_all_main_boards(client_user_id)
     # order = ["ANALYSIS", "FORECASTING", "REVENUE", "PROFITABILITY", "COGS", "CASH FLOW", "BUDGET", "VARIANCE ANALYSIS"]
     # main_boards = sorted(main_boards, key=lambda x: order.index(x.name))
-    
     return main_boards
 
 @router.get("/get_all_info_tree", response_model=list)

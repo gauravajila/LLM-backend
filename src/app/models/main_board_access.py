@@ -15,4 +15,4 @@ class MainBoardAccess(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     
     # Relationships
-    main_board: MainBoard = Relationship(back_populates="accesses")
+    main_board: Optional["MainBoard"] = Relationship(back_populates="accesses")  # Use forward declaration

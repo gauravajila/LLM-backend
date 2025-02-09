@@ -102,28 +102,50 @@ def get_planner_instruction(input_prompt):
   User input prompt: {input_prompt} '''
   
 def get_planner_instruction_with_data(input_prompt, data):
-  return f''' 
-  Enhance the instructions for using a Pandas DataFrame without including specific code.
-  When revising the instructions, consider the following categories for column:  
-  1. "Group" : ['MRI', 'Bio Chemistry', 'CT', 'Haematology', 'Others',
-       'Micro Biology', 'X-Ray', 'Serology', 'USG', 'Pathology', 'Food',
-       'ECG', 'Bio Medical', 'Room Charges', 'EEG', 'Others-OP',
-       'Clinical Pathology', 'Surgery', 'Theraphy', 'EMR', 'Ambulance',
-       'Tray', 'Consumables', 'BIPAP-Rent Income', 'C-Arm', 'Cath Lab',
-       'Consultation', 'ECT', 'Admission', 'MRD', 'Oxygen', 'Consumbles',
-       'Drugs', 'consultation', 'Lab']
-  Exclude steps related to importing libraries and loading data. 
-  User input prompt: {input_prompt} 
-  Here is data: {data}'''
+  # return f''' 
+  # Enhance the instructions for using a Pandas DataFrame without including specific code.
+  # When revising the instructions, consider the following categories for column:  
+  # 1. "Group" : ['MRI', 'Bio Chemistry', 'CT', 'Haematology', 'Others',
+  #      'Micro Biology', 'X-Ray', 'Serology', 'USG', 'Pathology', 'Food',
+  #      'ECG', 'Bio Medical', 'Room Charges', 'EEG', 'Others-OP',
+  #      'Clinical Pathology', 'Surgery', 'Theraphy', 'EMR', 'Ambulance',
+  #      'Tray', 'Consumables', 'BIPAP-Rent Income', 'C-Arm', 'Cath Lab',
+  #      'Consultation', 'ECT', 'Admission', 'MRD', 'Oxygen', 'Consumbles',
+  #      'Drugs', 'consultation', 'Lab']
+  # Exclude steps related to importing libraries and loading data. 
+  # User input prompt: {input_prompt} 
+  # Here is data: {data}'''
+      return f"""
+        ANALYSIS REQUEST:
+        {input_prompt}
+
+        DATA OVERVIEW:
+        {data}
+
+        INSTRUCTION GUIDELINES:
+        1. Review the data structure and contents provided
+        2. Identify relevant columns and relationships
+        3. Consider appropriate grouping and aggregation methods
+        4. Think about necessary data transformations
+        5. Plan for handling missing or inconsistent values
+        6. Determine meaningful metrics for analysis
+
+        NOTES:
+        - Focus on what needs to be done, not how to code it
+        - Consider data quality and validation requirements
+        - Think about the most efficient approach to analysis
+        - Keep the end goal in mind when planning steps
+
+        Please provide your analysis approach based on these guidelines and the specific request.
+        """
+  
   
   
 def get_ai_documentation_instruction():
     return '''
-    Given the data, write column descriptions. Return output in this format:
-    ```json
+    Given the data, write column descriptions. Return output in json format:
     {
       "configuration_details": "{\"Column_name\":\"Column Description\"}"
     }
-    ```
     Here is the data:
     '''

@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Form, Query
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from app.repositories.data_management_table_repository import DataManagementTableRepository, TableStatusRepository
 from app.repositories.ai_documentation_repository import AiDocumentationRepository
 from app.models.data_management_table import DataManagementTable, TableStatus
@@ -246,10 +247,30 @@ async def upload_file_to_table_status(
 
 #     return downloaded_files
 
-@router.delete("/status/delete/{table_id}", response_model=TableStatus)
-async def delete_table_status(table_id: int, token: str = Depends(verify_token)):
-    repository = TableStatusRepository()
-    deleted_status = repository.delete_table_status(table_id)
-    if not deleted_status:
-        raise HTTPException(status_code=404, detail=f"TableStatus with id {table_id} not found")
-    return deleted_status
+
+
+@router.delete("/{table_id}", response_model=DataManagementTable)
+async def delete_data_management_table(table_id: int, token: str = Depends(verify_token)):
+    repository = DataManagementTableRepository()
+    table_status_repository = TableStatusRepository()
+
+    try:
+        # Check if the table exists
+        table = repository.get_data_management_table(table_id)
+        if not table:
+            raise HTTPException(status_code=404, detail="Data Management Table not found")
+
+        # Delete related records from TableStatus first
+        table_status_repository.delete_table_status_by_data_management_table_id(table_id)
+
+        # Now delete the data management table
+        deleted_table = repository.delete_data_management_table(table_id)
+        return deleted_table
+
+    except IntegrityError as e:
+        raise HTTPException(status_code=400, detail="Cannot delete table due to existing references in TableStatus.")
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
+
+

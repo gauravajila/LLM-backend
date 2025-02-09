@@ -2,6 +2,7 @@
 # #ANALYSIS  FORECASTING KPI_DEFINITION WHAT_IF_FRAMEWORK PROFITABILITY_ANALYSIS
 from datetime import datetime
 from typing import Optional, List
+# from app.models.main_board_access import MainBoardAccess
 from sqlmodel import SQLModel, Field, Relationship
 
 class MainBoard(SQLModel, table=True):

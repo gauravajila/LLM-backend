@@ -42,6 +42,9 @@ import pandas as pd
 import numpy as np
 from multiprocessing import Pool
 from app.authentication import verify_token
+import os
+from dotenv import load_dotenv
+load_dotenv()
 
 router = APIRouter(prefix="/prompts", tags=["Prompts"])
 
@@ -234,7 +237,9 @@ class RePromptService:
 
 @router.post("/re_prompt")
 async def run_re_prompt(input_text: str, board_id: str, token: str = Depends(verify_token)):
-    re_prompt_service = RePromptService(prompt_repository, ChatOpenAI(temperature=0, model="gpt-3.5-turbo"))
+    re_prompt_service = RePromptService(prompt_repository, ChatOpenAI(temperature=os.getenv("OPENAI_TEMPERATURE"), 
+                     model=os.getenv("OPENAI_MINI_MODEL"),
+                     top_p=os.getenv('OPENAI_TOP_P')))
     return re_prompt_service.run_re_prompt(input_text, board_id)
 
 class CustomJSONEncoder(json.JSONEncoder):
@@ -416,16 +421,6 @@ def handle_response_content(response_content, input_text, llm):
 
 
 def generate_graph_json(response_content: ResponseContent, llm) -> dict:
-    """
-    Generate the graph JSON output from the response content.
-
-    Args:
-        response_content (ResponseContent): The formatted response content.
-        llm (ChatOpenAI): The language model instance.
-
-    Returns:
-        dict: The graph JSON output.
-    """
     try:
         if "columns" in response_content["table"] and len(response_content["table"]['data']):
             llm = ChatOpenAI(temperature=0, model="gpt-3.5-turbo")
@@ -566,15 +561,6 @@ class PromptFacade:
         self.generate_insights = GenerateInsightRecommendationOptimization(llm_model="gpt-4o")
 
     async def handle_prompt(self, input_text: str, board_id: str, user_name:str, use_cache: bool) -> Dict[str, Any]:
-        '''
-        Author: Shashi Raj
-        Date: 09-06-2024
-        
-        To do: 
-        We need to write a logic to identify the dataframe.
-        If there are multiple dataframe.
-        
-        '''
         start_time = datetime.now()
 
         combined_contents, dataframes_list, table_name_list = prompt_repository.get_file_download_links_by_board_id(board_id)
