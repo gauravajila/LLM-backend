@@ -117,7 +117,7 @@ async def update_data_management_table(table_id: int, data_management_table: Dat
     repository = DataManagementTableRepository()
     return repository.update_data_management_table(table_id, data_management_table)
 
-@router.delete("/{table_id}", response_model=DataManagementTable)
+@router.delete("/{table_id}")
 async def delete_data_management_table(table_id: int, token: str = Depends(verify_token)):
     repository = DataManagementTableRepository()
     return repository.delete_data_management_table(table_id)
@@ -249,7 +249,7 @@ async def upload_file_to_table_status(
 
 
 
-@router.delete("/{table_id}", response_model=DataManagementTable)
+@router.delete("/{table_id}")
 async def delete_data_management_table(table_id: int, token: str = Depends(verify_token)):
     repository = DataManagementTableRepository()
     table_status_repository = TableStatusRepository()

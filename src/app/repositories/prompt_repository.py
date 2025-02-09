@@ -1,8 +1,10 @@
 # app/repositories/prompt_repository.py
 from datetime import datetime
 import hashlib
+import os
+import io
 import pandas as pd
-from typing import Optional, List
+from typing import Optional, List, Tuple
 from sqlmodel import Session, select, delete
 from app.database import engine
 from app.models.prompt import Prompt, PromptCreate
@@ -10,13 +12,43 @@ from app.models.prompt_response import PromptResponse
 from app.models.boards import Boards
 from app.models.main_board import MainBoard
 from fastapi import HTTPException
-
+from app.models.data_management_table import DataManagementTable, TableStatus
+from minio import Minio
+from minio.error import S3Error
 class PromptRepository:
     def __init__(self):
         #Create tables
         Prompt.metadata.create_all(engine)
         PromptResponse.metadata.create_all(engine)
+        self.minio_host = os.getenv("MINIO_HOST", "localhost:9000")
+        self.minio_access_key = os.getenv("MINIO_ACCESS_KEY")
+        self.minio_secret_key = os.getenv("MINIO_SECRET_KEY")
+        self.minio_secure = os.getenv("MINIO_SECURE", "false").lower() == "true"
+        self.bucket_name = os.getenv("MINIO_BUCKET", "customer-document-storage")
+
+        self._init_minio()
         
+    def _init_minio(self) -> None:
+        """Initialize MinIO client"""
+        self.minio_client = Minio(
+            self.minio_host,
+            access_key=self.minio_access_key,
+            secret_key=self.minio_secret_key,
+            secure=self.minio_secure
+        )
+        self._ensure_bucket_exists()
+
+    def _ensure_bucket_exists(self) -> None:
+        """Ensure MinIO bucket exists"""
+        try:
+            if not self.minio_client.bucket_exists(self.bucket_name):
+                self.minio_client.make_bucket(self.bucket_name)
+        except S3Error as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to initialize MinIO bucket: {str(e)}"
+            )
+            
     def create_prompt(self, prompt_create: PromptCreate) -> Prompt:
         
         db_prompt = Prompt(
@@ -51,39 +83,132 @@ class PromptRepository:
             results = session.exec(statement).all()
             return list(results)
 
-    def tuples_to_combined_dataframe(self, tuples_list):
+    def tuples_to_combined_dataframe(self, file_records: List[Tuple[str, str]]) -> Tuple[bytes, List[pd.DataFrame], List[str]]:
+        """Process file records into dataframes and combined content."""
         result_dict = {}
         dataframes_list = []
+        table_names = []
 
-        for tup in tuples_list:
-            table_name = tup[1]
-            download_link = tup[0]
-
+        # Group files by table name
+        for download_link, table_name in file_records:
             if table_name not in result_dict:
                 result_dict[table_name] = []
-
+                table_names.append(table_name)
             result_dict[table_name].append(download_link)
 
+        # Process each file and combine
         combined_contents = ""
-        table_name_list = []
         for table_name, download_links in result_dict.items():
-            table_name_list.append(table_name)
-            for file_download_link in download_links:
-                df = pd.read_csv(file_download_link)
-                contents = df.to_csv(index=False)
-                combined_contents += contents
-                dataframes_list.append(df)
+            for link in download_links:
+                try:
+                    # Parse the MinIO URL to get object name
+                    if link.startswith('minio://'):
+                        # Split the URL and get only the path part after the bucket name
+                        parts = link.split('/')
+                        # Find the index of the bucket name and take everything after it
+                        bucket_index = parts.index(self.bucket_name)
+                        object_name = '/'.join(parts[bucket_index + 1:])
+                    else:
+                        object_name = link
 
-        return combined_contents.encode(), dataframes_list, table_name_list
+                    print(f"Accessing MinIO object: {object_name}")
+                    print(f"Bucket name: {self.bucket_name}")
+                    
+                    # Get object data from MinIO
+                    response = self.minio_client.get_object(self.bucket_name, object_name)
+                    file_data = response.read()
+                    
+                    # Convert bytes to DataFrame using StringIO
+                    df = pd.read_csv(io.StringIO(file_data.decode('utf-8')))
+                    print(f"Successfully read DataFrame with shape: {df.shape}")
+                    
+                    # Convert back to CSV string for combined contents
+                    contents = df.to_csv(index=False)
+                    combined_contents += contents
+                    dataframes_list.append(df)
+                    
+                except Exception as e:
+                    print(f"Error processing file {link}: {str(e)}")
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"Error processing file {link}: {str(e)}"
+                    )
 
-    def get_file_download_links_by_board_id(self, board_id: int):
+        return combined_contents.encode(), dataframes_list, table_names
+
+    def get_file_from_minio(self, file_path: str) -> bytes:
+        """Download file from MinIO and return its contents."""
+        try:
+            # Parse the MinIO URL to get object name
+            if file_path.startswith('minio://'):
+                # Split the URL and get only the path part after the bucket name
+                parts = file_path.split('/')
+                # Find the index of the bucket name and take everything after it
+                bucket_index = parts.index(self.bucket_name)
+                object_name = '/'.join(parts[bucket_index + 1:])
+            else:
+                object_name = file_path
+
+            print(f"Retrieving object from MinIO: {object_name}")
+            print(f"Bucket name: {self.bucket_name}")
+            
+            # Get the object from MinIO
+            response = self.minio_client.get_object(self.bucket_name, object_name)
+            return response.read()
+            
+        except S3Error as e:
+            print(f"MinIO error: {str(e)}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error reading file from MinIO: {str(e)}"
+            )
+        except Exception as e:
+            print(f"Unexpected error: {str(e)}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Unexpected error reading file: {str(e)}"
+            )
+
+    def get_file_download_links_by_board_id(self, board_id: int) -> Tuple[bytes, List[pd.DataFrame], List[str]]:
+        """Get file download links and process files for a board.
+        
+        Args:
+            board_id: ID of the board
+            
+        Returns:
+            Tuple containing:
+            - Combined CSV content as bytes
+            - List of dataframes
+            - List of table names
+        """
         with Session(engine) as session:
-            # Note: Adjust this based on your actual table structure
-            statement = select("table_status.file_download_link", "data_management_table.table_name")\
-                .join("data_management_table")\
-                .where("table_status.board_id" == board_id)
-            results = session.exec(statement).all()
-            return self.tuples_to_combined_dataframe(results)
+            try:
+                # Construct proper SQLAlchemy query using the models
+                query = (
+                    select(TableStatus.file_download_link, DataManagementTable.table_name)
+                    .join(
+                        DataManagementTable,
+                        TableStatus.data_management_table_id == DataManagementTable.id
+                    )
+                    .where(DataManagementTable.board_id == board_id)
+                    # .where(TableStatus.approved == True)  # Only get approved files
+                )
+                
+                results = session.exec(query).all()
+                
+                if not results:
+                    raise HTTPException(
+                        status_code=404,
+                        detail=f"No approved files found for board {board_id}"
+                    )
+                
+                return self.tuples_to_combined_dataframe(results)
+                
+            except Exception as e:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Error retrieving file links: {str(e)}"
+                )
 
     def get_prompt(self, prompt_id: int) -> Optional[Prompt]:
         with Session(engine) as session:

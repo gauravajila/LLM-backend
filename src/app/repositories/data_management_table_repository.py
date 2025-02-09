@@ -132,7 +132,7 @@ class DataManagementTableRepository(BaseRepository):
         finally:
             session.close()
 
-    def delete_data_management_table(self, table_id: int) -> Optional[DataManagementTable]:
+    def delete_data_management_table(self, table_id: int):
         """Delete a data management table"""
         session = self.get_session()
         try:

@@ -8,7 +8,7 @@ class DataManagementTableBase(SQLModel):
     board_id: Optional[int] = Field(default=None, foreign_key="Boards.id")
     table_name: str = Field(index=True)
     table_description: Optional[str] = Field(default=None)
-    table_column_type_detail: Optional[dict] = Field(default=None, sa_type=JSON)
+    table_column_type_detail: str = Field(default=None)
 
 class DataManagementTable(DataManagementTableBase, table=True):
     __tablename__ = "DataManagementTable"
@@ -30,7 +30,7 @@ class DataManagementTable(DataManagementTableBase, table=True):
                     "table_name": "SalesData",
                     "table_description": "Monthly sales data",
                     "board_id": 1,
-                    "table_column_type_detail": {"info": 1},
+                    "table_column_type_detail": "",
                 }
             ]
         }
