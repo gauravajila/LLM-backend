@@ -606,10 +606,24 @@ class PromptFacade:
         return result
 
 @router.post("/run_prompt_v2")
-async def run_prompt_v2(input_text: str, board_id: str, user_name:str = '', use_cache: bool = True, token: str = Depends(verify_token)):
+async def run_prompt_v2(
+    input_text: str, 
+    board_id: str, 
+    user_name: str = '', 
+    use_cache: bool = True, 
+    token: str = Depends(verify_token)
+):
     """
     API endpoint to run prompt, validate, generate graphs, and extract insights.
     """
-    facade = PromptFacade()
-    result = await facade.handle_prompt(input_text, board_id, user_name, use_cache)
-    return JSONResponse(content=json.loads(json.dumps(result, cls=CustomJSONEncoder)))
+    try:
+        facade = PromptFacade()
+        result = await facade.handle_prompt(input_text, board_id, user_name, use_cache)
+        return JSONResponse(content=json.loads(json.dumps(result, cls=CustomJSONEncoder)))
+    except Exception as e:
+        # Log the error
+        # Return an error response
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Failed to process prompt: {str(e)}"}
+        )
