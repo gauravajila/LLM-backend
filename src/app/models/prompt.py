@@ -1,7 +1,9 @@
 # app/models/prompt.py
 from datetime import datetime
-from typing import Optional
-from sqlmodel import SQLModel, Field
+from typing import Optional, TYPE_CHECKING
+from sqlmodel import SQLModel, Field, Relationship
+if TYPE_CHECKING:
+    from app.models.boards import Boards 
 
 class PromptBase(SQLModel):
     prompt_text: str
@@ -23,6 +25,7 @@ class Prompt(SQLModel, table=True):
     created_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
     updated_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
     user_name: Optional[str] = None
+    board: Optional["Boards"] = Relationship(back_populates="prompts")
 
     class Config:
         from_attributes = True

@@ -13,6 +13,7 @@ class AiDocumentation(SQLModel, table=True):
     name: str
     created_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
     updated_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
+    board: Optional["Boards"] = Relationship(back_populates="ai_docs")
 
     class Config:
         orm_mode = True

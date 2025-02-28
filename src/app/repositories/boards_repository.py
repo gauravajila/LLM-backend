@@ -75,12 +75,14 @@ class BoardsRepository:
             accessible_board_ids = session.exec(access_statement).all()
             
             # Get boards where user has access through main board
+            
             statement = select(Boards).where(
-                or_(
-                    Boards.id.in_(accessible_board_ids),
-                    Boards.is_active == True  # Include active boards where user might have main board access
+                and_(
+                    or_(Boards.id.in_(accessible_board_ids), Boards.is_active == True),
+                    Boards.is_active == True  # Exclude soft-deleted boards
                 )
             )
+            
             boards = []
             for board in session.exec(statement).all():
                 if self.access_repository.check_user_has_any_permission(board.id, user_id):
@@ -92,7 +94,7 @@ class BoardsRepository:
         Get a specific board if the user has access to it.
         """
         with Session(self.engine) as session:
-            statement = select(Boards).where(Boards.id == board_id)
+            statement = select(Boards).where(and_(Boards.id == board_id, Boards.is_active == True))
             board = session.exec(statement).first()
             
             if board and self.access_repository.check_user_has_any_permission(board_id, user_id):

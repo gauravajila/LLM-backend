@@ -3,6 +3,8 @@ import os
 from dotenv import load_dotenv
 from sqlmodel import SQLModel, create_engine, Session
 from contextlib import contextmanager
+from sqlalchemy.orm import sessionmaker
+
 
 # Load environment variables from .env file
 load_dotenv()
@@ -16,7 +18,6 @@ DB_NAME = os.getenv("DB_NAME")
 
 # Construct the database URL
 DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-
 # Create engine
 engine = create_engine(
     DATABASE_URL,
@@ -59,3 +60,12 @@ def init_db():
             print("Database initialization failed")
     except Exception as e:
         print(f"Error initializing database: {str(e)}")
+        
+#added by Gaurav
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()

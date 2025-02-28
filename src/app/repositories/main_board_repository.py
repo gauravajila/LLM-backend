@@ -104,9 +104,7 @@ class MainBoardRepository:
                         return None  # Return if MainBoard doesn't exist
 
                     # Delete related MainBoardAccess records to prevent FK constraint errors
-                    session.exec(
-                        delete(MainBoardAccess).where(MainBoardAccess.main_board_id == main_board_id)
-                    )
+                    session.query(MainBoardAccess).filter(MainBoardAccess.main_board_id == main_board_id).delete()
                     session.commit()  # Ensure access records are deleted before proceeding
 
                     # Delete the MainBoard
