@@ -555,10 +555,10 @@ class GraphGenerator:
 
 class PromptFacade:
     def __init__(self):
-        self.prompt_handler = PromptHandler(llm_model="gpt-4o")
-        self.graph_generator = GraphGenerator(llm_model="gpt-4o")
-        self.dataframe_processor = DataFrameProcessor(llm_model="gpt-4o")
-        self.generate_insights = GenerateInsightRecommendationOptimization(llm_model="gpt-4o")
+        self.prompt_handler = PromptHandler(llm_model="gpt-4o-mini")
+        self.graph_generator = GraphGenerator(llm_model="gpt-4o-mini")
+        self.dataframe_processor = DataFrameProcessor(llm_model="gpt-4o-mini")
+        self.generate_insights = GenerateInsightRecommendationOptimization(llm_model="gpt-4o-mini")
 
     async def handle_prompt(self, input_text: str, board_id: str, user_name:str, use_cache: bool) -> Dict[str, Any]:
         start_time = datetime.now()
@@ -568,7 +568,7 @@ class PromptFacade:
         existing_response = await prompt_response_repository.check_existing_response(hash_key)
 
         if existing_response and use_cache:
-            return existing_response[3]
+            return existing_response.prompt_out
 
         response_content = self.prompt_handler.run(input_text, dataframes_list)
 
@@ -610,10 +610,6 @@ async def run_prompt_v2(input_text: str, board_id: str, user_name:str = '', use_
     """
     API endpoint to run prompt, validate, generate graphs, and extract insights.
     """
-    try:
-        facade = PromptFacade()
-        result = await facade.handle_prompt(input_text, board_id, user_name, use_cache)
-        return JSONResponse(content=json.loads(json.dumps(result, cls=CustomJSONEncoder)))
-    except Exception as e:
-        logger.error(f"Error in run_prompt_v2: {str(e)}")
-        raise HTTPException(status_code=500, detail="Internal Server Error")
+    facade = PromptFacade()
+    result = await facade.handle_prompt(input_text, board_id, user_name, use_cache)
+    return JSONResponse(content=json.loads(json.dumps(result, cls=CustomJSONEncoder)))
