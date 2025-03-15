@@ -24,7 +24,7 @@ class BaseRepository:
         self.db_name = os.getenv("DB_NAME")
 
         # MinIO configuration
-        self.minio_host = os.getenv("MINIO_HOST", "localhost:9000")
+        self.minio_host = os.getenv("MINIO_ENDPOINT")
         self.minio_access_key = os.getenv("MINIO_ACCESS_KEY")
         self.minio_secret_key = os.getenv("MINIO_SECRET_KEY")
         self.minio_secure = os.getenv("MINIO_SECURE", "false").lower() == "true"
